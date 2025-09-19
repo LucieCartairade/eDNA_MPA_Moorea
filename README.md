@@ -3,8 +3,10 @@ These R codes show how to plot figures from this paper :
 
 ## Figure 1
 <p align="center">
-  <img src="Figures/Figure1.png" alt="Figure 1" class="center" width="50%"/>
+  <img src="Figures/Figure1.PNG" alt="Figure 1" class="center" width="50%"/>
 </p>
+
+[]
 
 Shapes files available on : https://www.tefenua.data.gov.pf
 https://www.tefenua.data.gov.pf/datasets/ef2bdc8e55f049318a3888f8134349b0_0/explore?location=-17.535984%2C-149.840113%2C11.48
