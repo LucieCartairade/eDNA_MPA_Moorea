@@ -6,10 +6,8 @@ These R codes show how to plot figures from this paper :
   <img src="Figures/Figure1.PNG" alt="Figure 1" class="center" width="50%"/>
 </p>
 
-[]
-
 Shapes files available on : https://www.tefenua.data.gov.pf
-https://www.tefenua.data.gov.pf/datasets/ef2bdc8e55f049318a3888f8134349b0_0/explore?location=-17.535984%2C-149.840113%2C11.48
+and : https://www.tefenua.data.gov.pf/datasets/ef2bdc8e55f049318a3888f8134349b0_0/explore?location=-17.535984%2C-149.840113%2C11.48
 ```r
 library(sf)
 
@@ -83,7 +81,7 @@ ggsave(path = Images_path, file = "Figure1.pdf", height = 7, width = 7)
 ```
 ## Figure 2
 <p align="center">
-  <img src="Figures/Figure2.png" alt="Figure 2" class="center" width="50%"/>
+  <img src="Figures/Figure2.PNG" alt="Figure 2" class="center" width="50%"/>
 </p>
 
 ```r
@@ -105,7 +103,7 @@ dev.off()
 
 # Figure 3
 <p align="center">
-  <img src="Figures/Figure3.png" alt="Figure 3" class="center" width="50%"/>
+  <img src="Figures/Figure3.PNG" alt="Figure 3" class="center" width="50%"/>
 </p>
 
 ```r
@@ -188,11 +186,11 @@ ggsave(path = Images_path, file = "Figure4.pdf", width = 6.5, height = 5)
 ```
 ## Figure 5 and 6
 <p align="center">
-  <img src="Figures/Figure5.png" alt="Figure 5" class="center" width="50%"/>
+  <img src="Figures/Figure5.PNG" alt="Figure 5" class="center" width="50%"/>
 </p>
 
 <p align="center">
-  <img src="Figures/Figure6.png" alt="Figure 6" class="center" width="50%"/>
+  <img src="Figures/Figure6.PNG" alt="Figure 6" class="center" width="50%"/>
 </p>
 
 ```r
