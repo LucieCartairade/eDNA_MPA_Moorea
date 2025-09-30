@@ -1,12 +1,19 @@
-These R codes show how to plot figures from this paper : 
-"TITLE" doi : 
+These R scripts reproduce the figures from the paper:
+Evaluating the effect of MPAs based on eDNA monitoring and visual census comparison
+DOI
 
-## Figure 1
+Methodological choices and the bioinformatics pipeline are described in:
+Optimizing a novel eDNA-based framework for Reef Fish Biodiversity monitoring using an Autonomous Filtration System and in situ Nanopore Sequencing
+DOI
+https://github.com/LucieCartairade/eDNA_Methodology
+
+##  Map of Moorea showing the Marine Protected Area (MPAs) and sampling locations
+### Figure 1
 <p align="center">
   <img src="Figures/Figure1.PNG" alt="Figure 1" class="center" width="50%"/>
 </p>
 
-Shapes files available on : https://www.tefenua.data.gov.pf
+Shapes files available at : https://www.tefenua.data.gov.pf
 and : https://www.tefenua.data.gov.pf/datasets/ef2bdc8e55f049318a3888f8134349b0_0/explore?location=-17.535984%2C-149.840113%2C11.48
 ```r
 library(sf)
@@ -79,7 +86,8 @@ ggplot() +
 
 ggsave(path = Images_path, file = "Figure1.pdf", height = 7, width = 7)  
 ```
-## Figure 2
+## Community composition overview
+### Figure 2
 <p align="center">
   <img src="Figures/Figure2.PNG" alt="Figure 2" class="center" width="50%"/>
 </p>
@@ -101,18 +109,20 @@ gridExtra::grid.arrange(p1, p2, ncol = 2, padding = unit(1, "cm"), top = grid::t
 dev.off()
 ```
 
-# Figure 3
+### Figure 3
 <p align="center">
   <img src="Figures/Figure3.PNG" alt="Figure 3" class="center" width="50%"/>
 </p>
 
 ```r
+# Count number of species (Taxon) per Family and Sample.Type
 df_count <- Tax_melt_wVC %>%
   filter(!is.na(Family), !is.na(Taxon), Taxon != "unknown") %>%
   distinct(Sample.Type, Family, Taxon) %>%
   group_by(Sample.Type, Family) %>%
   summarise(count = n(), .groups = "drop")
 
+# Define order of families: first by total species count, second by presence in both methods
 family_order <- df_count %>%
   group_by(Family) %>%
   summarise(
@@ -120,16 +130,19 @@ family_order <- df_count %>%
     both_methods = as.integer(n_distinct(Sample.Type[count > 0]) == 2),
     .groups = "drop"
   ) %>%
-  arrange(sum_count, desc(both_methods)) %>% 
+  arrange(sum_count, desc(both_methods)) %>%  
   pull(Family)
 
+# Complete the dataset with missing combinations Family x Sample.Type,
+# fill with zeros, and prepare mirrored values for plotting
 df_count <- df_count %>%
   tidyr::complete(Sample.Type, Family, fill = list(count = 0)) %>%
   mutate(Family = factor(Family, levels = family_order),
          Sample.Type = factor(Sample.Type, levels = c("eDNA", "UVC")),
          count_plot = ifelse(Sample.Type == "eDNA", -count, count)) 
 
-ggplot(df_count, aes(x = Family, y = count_plot, fill = Sample.Type)) +
+# Build mirrored barplot: negative values for eDNA, positive for UVC
+p1 <- ggplot(df_count, aes(x = Family, y = count_plot, fill = Sample.Type)) +
   geom_bar(stat = "identity", width = 0.5) +
   scale_fill_manual(values = c("eDNA"= "#8f226e", "UVC" = "#f18055")) +
   scale_y_continuous(labels = abs) +
@@ -144,47 +157,204 @@ ggplot(df_count, aes(x = Family, y = count_plot, fill = Sample.Type)) +
     legend.text = element_text(size = 10),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4)
   )
+p1
 
-ggsave(path = Images_path, filename = "Figure3.pdf", width = 10, height = 7)
+ggsave(path = Images_path, file = "Figure3.pdf", width = 6.5, height = 5)
 ```
-## Figure 4
+### Figure 4
+<p align="center">
+  <img src="Figures/Figure4.PNG" alt="Figure 4" class="center" width="50%"/>
+</p>
+
 ```r
-df_area <- Tax_melt_wVC %>%
-  filter(!is.na(Family), !is.na(relative_biomass)) %>%
-  group_by(Sample.Type, Family) %>%
-  summarise(total = sum(relative_biomass), .groups = "drop") %>%
+# Table species (Taxon) x Family x Method, with reads
+df_taxa <- Tax_melt_wVC %>% 
+  filter(!is.na(Family), Family != "unknown",
+         !is.na(relative_biomass), !is.na(Taxon)) %>%
+  group_by(Sample.Type, Family, Taxon) %>%
+  summarise(reads = sum(Nb.reads_sum), .groups = "drop")
+
+# Proportions calculated at the method level (100% per Sample.Type)
+df_taxa <- df_taxa %>%
   group_by(Sample.Type) %>%
-  mutate(prop = total / sum(total)) %>%
+  mutate(prop = 100 * reads / sum(reads)) %>%
   ungroup()
 
-df_complete <- df_area %>%
-  tidyr::complete(Sample.Type, Family, fill = list(total = 0, prop = 0))
-df_complete
+sum(df_taxa$prop)
 
-family_order <- c(unlist(rev(unique(df_area[order(df_area$prop, decreasing = F), "Family"]))))
-df_area$Family <- factor(df_area$Family, levels = unique(c("unknown",family_order)))
+# Order families by their total contribution (all methods)
+family_order <- df_taxa %>%
+  group_by(Family) %>%
+  summarise(sum_prop = sum(prop, na.rm = TRUE), .groups = "drop") %>%
+  arrange(sum_prop) %>%
+  pull(Family)
 
-family_order <- c(unlist(rev(unique(df_complete[order(df_complete$prop, decreasing = F), "Family"]))))
-df_complete$Family <- factor(df_complete$Family, levels = unique(c("unknown",family_order)))
+# Prepare the mirror (eDNA negative, UVC positive)
+df_plot <- df_taxa %>%
+  mutate(
+    Family = factor(Family, levels = family_order),
+    Sample.Type = factor(Sample.Type, levels = c("eDNA", "UVC")),
+    prop_plot = ifelse(Sample.Type == "eDNA", -prop, prop)
+  )
 
-set.seed(100)
-getPalette = colorRampPalette(RColorBrewer::brewer.pal(9, "Paired"))
-my_Palette = getPalette(length(unique(Tax_melt_wVC$Family)))
-names(my_Palette) = unique(Tax_melt_wVC$Family)
-my_Palette["Hominidae"] <- "#444444"
-my_Palette["unknown"] <- "#999999"
+# Species palette 
+RColorBrewer::display.brewer.all(colorblindFriendly = TRUE)
+getPalette = colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))
+speciesList = sample(unique(df_plot$Taxon), length(unique(df_plot$Taxon)))
+speciesPalette = getPalette(length(speciesList))
+names(speciesPalette) = speciesList
 
-# Plot
-ggplot(df_complete, aes(x = Sample.Type, y = prop, fill = Family, group = Family)) +
-  geom_area(stat = "identity", position = "stack") +
-  scale_x_discrete(limits = c("eDNA", "UVC")) +
-  scale_fill_manual(values= my_Palette) + 
-  labs(x = "Method",y = "Family relative biomass") + 
-  guides(fill=guide_legend(ncol=3))
-  
+# Main plot: stacked bars by species (Taxon)
+ggplot(df_plot, aes(x = Family, y = prop_plot, fill = Taxon)) +
+  geom_bar(stat = "identity", width = 0.5) +
+  scale_fill_manual(values= speciesPalette) + 
+  scale_y_continuous(labels = function(x) paste0(abs(x), "%")) +
+  labs(x = "Family", y = "Relative biomass estimation (%)", fill = "Taxon") +
+  coord_flip() +
+  theme(
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 10),
+    axis.title  = element_text(size = 12),
+    legend.position="none",
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4)
+  )+
+  annotate("text", x = length(unique(df_plot$Family)) - 3, y = -40, label = "eDNA", size = 5) +
+  annotate("text", x = length(unique(df_plot$Family)) - 3, y =  40, label = "UVC", size = 5)
+
 ggsave(path = Images_path, file = "Figure4.pdf", width = 6.5, height = 5)
 ```
-## Figure 5 and 6
+### Figure 4 bis
+<p align="center">
+  <img src="Figures/Figure4bis.PNG" alt="Figure 4" class="center" width="50%"/>
+</p>
+
+```r
+# Count number of species (Taxon) per Family and Sample.Type
+df_count <- Tax_melt_wVC %>%
+  filter(!is.na(Family), !is.na(Taxon), Taxon != "unknown") %>%
+  distinct(Sample.Type, Family, Taxon) %>%
+  group_by(Sample.Type, Family) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Define order of families: first by total species count, second by presence in both methods
+family_order <- df_count %>%
+  group_by(Family) %>%
+  summarise(
+    sum_count = sum(count, na.rm = TRUE),
+    both_methods = as.integer(n_distinct(Sample.Type[count > 0]) == 2),
+    .groups = "drop"
+  ) %>%
+  arrange(sum_count, desc(both_methods)) %>%  
+  pull(Family)
+
+# Complete the dataset with missing Family x Sample.Type combinations,
+# fill with zeros, and prepare mirrored values for plotting
+df_count <- df_count %>%
+  tidyr::complete(Sample.Type, Family, fill = list(count = 0)) %>%
+  mutate(Family = factor(Family, levels = family_order),
+         Sample.Type = factor(Sample.Type, levels = c("eDNA", "UVC")),
+         count_plot = ifelse(Sample.Type == "eDNA", -count, count)) 
+
+# Build mirrored barplot: negative values for eDNA, positive for UVC
+p1 <- ggplot(df_count, aes(x = Family, y = count_plot, fill = Sample.Type)) +
+  geom_bar(stat = "identity", width = 0.5) +
+  scale_fill_manual(values = c("eDNA"= "#8f226e", "UVC" = "#f18055")) +
+  scale_y_continuous(labels = abs) +
+  labs(x = "Family", y = "Species count", fill = "Method") +
+  coord_flip() +
+  #theme_classic(base_size = 12) +
+  theme(
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 10),
+    axis.title = element_text(size = 12),
+    legend.position = "top",
+    legend.title = element_text(size = 11),
+    legend.text = element_text(size = 10),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4)
+  )
+p1
+
+ggsave(path = Images_path, filename = "Figure4.pdf", width = 10, height = 7)
+
+```
+## Community structure
+Data initialisation 
+```r
+sample <- Tax_melt_wVC %>% 
+  select(Sample.Type, Marine.Area, Sampling.Site, Habitat, Replica, Coast) %>% 
+  group_by(Sample.Type, Marine.Area, Sampling.Site, Habitat, Replica, Coast) %>%
+  summarise()
+sample <- as.data.frame(sample)
+rownames(sample) <- paste(sample$Sample.Type, sample$Marine.Area, sample$Sampling.Site, sample$Habitat, sample$Replica)
+
+Tax_table <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Family != "unknown"), 
+                                 value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
+
+Tax_table_eDNA <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA" & Family != "unknown"), 
+                                 value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
+
+Tax_table_VC <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC" & Family != "unknown"), 
+                                  value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
+
+```
+Jaccard and BrayCurtis distance matrices
+```r
+# Jaccard and Bray Curtis on both Sample.Type
+dist.jc.both <- betapart::beta.pair(t(ifelse(Tax_table != 0 , 1, 0)), index.family="jaccard")
+dist.bc.both <- vegan::vegdist(t(Tax_table), method = "bray")
+
+# Jaccard and Bray Curtis on eDNA
+dist.jc.eDNA <- betapart::beta.pair(t(ifelse(Tax_table_eDNA != 0 , 1, 0)), index.family="jaccard")
+dist.bc.eDNA <- vegan::vegdist(t(Tax_table_eDNA), method = "bray")
+
+# Jaccard and Bray Curtis on VC
+dist.jc.VC <- betapart::beta.pair(t(ifelse(Tax_table_VC != 0 , 1, 0)), index.family="jaccard")
+dist.bc.VC <- vegan::vegdist(t(Tax_table_VC), method = "bray")
+
+# Heatmap of matrix of distance
+my_pheatmap <- function(dist, name, h, w)
+{
+  my_plot <- pheatmap::pheatmap(as.matrix(dist), cluster_rows = F, cluster_cols = F, cellwidth = 9, cellheight = 9)
+  my_plot
+  ggsave(path = paste0(Images_path, "Dissimilarity Matrix/"), file = name, plot = my_plot, height = h, width = w )
+}
+my_pheatmap(dist = dist.jc.both$beta.jac, name = "Both_Jaccard.svg", h = 20, w = 20 )
+my_pheatmap(dist = dist.bc.both, name = "Both_BrayCurtis.svg", h = 20, w = 20 )
+```
+PERMANOVA analyses on each method
+```r 
+my_Permanova <- function(dist, sample_dist)
+{
+  set.seed(19980822)
+  vegan::adonis2(
+    dist ~ Marine.Area + Sampling.Site + Sampling.Site:Habitat,
+    data = sample_dist, 
+    permutations = 10000, 
+    strata = sample_dist$Habitat)
+}
+my_Permanova(dist = dist.jc.eDNA$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA"))
+my_Permanova(dist = dist.jc.VC$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC"))
+
+my_Permanova(dist = dist.bc.eDNA, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA"))
+my_Permanova(dist = dist.bc.VC, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC"))
+```
+PERMANOVA analyses on both methods
+```r
+my_Permanova <- function(dist, sample_dist)
+{
+  set.seed(19980822)
+  vegan::adonis2(
+    dist ~ Sample.Type + Marine.Area + Sampling.Site + Sampling.Site:Habitat,
+    data = sample_dist, 
+    permutations = 99999, 
+    strata = sample_dist$Habitat
+    )
+}
+my_Permanova(dist = dist.jc.both$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B"))
+my_Permanova(dist = dist.bc.both, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" ))
+```
+### Figure 5 and 6 : Canonical Analysis of Principal coordinates
+
 <p align="center">
   <img src="Figures/Figure5.PNG" alt="Figure 5" class="center" width="50%"/>
 </p>
@@ -261,18 +431,11 @@ my_CAP <- function(dist, n_arrows) {
   return(p)
 }
 
-p <- my_CAP(dist = dist.jc.both$beta.jac, n_arrows = 15)
-p
-ggsave(path = paste0(Images_path, "CAP/"), file = "CAP_Jaccard_withSpecies_top15.pdf", height = 6, width = 7 )
+pJ15 <- my_CAP(dist = dist.jc.both$beta.jac, n_arrows = 15)
+pj15
+ggsave(path = paste0(Images_path, "CAP/"), file = "Figure5.pdf", height = 6, width = 7 )
 
-p10 <- my_CAP(dist = dist.jc.both$beta.jac, n_arrows = 10) ; p10
-ggsave(path = paste0(Images_path, "CAP/"), file = "CAP_Jaccard_withSpecies_top10.pdf", height = 6, width = 7 )
-
-p20 <- my_CAP(dist = dist.jc.both$beta.jac, n_arrows = 20) ; p20
-ggsave(path = paste0(Images_path, "CAP/"), file = "CAP_Jaccard_withSpecies_top20.pdf", height = 6, width = 7 )
-
-
-p <- my_CAP(dist = dist.bc.both, n_arrows = 15)
-p
-ggsave(path = paste0(Images_path, "CAP/"), file = "CAP_BrayCurtis_withSpecies_top15.pdf", height = 6, width = 7 )
+pBC15 <- my_CAP(dist = dist.bc.both, n_arrows = 15)
+pBC15
+ggsave(path = paste0(Images_path, "CAP/"), file = "Figure6.pdf", height = 6, width = 7 )
 ```
