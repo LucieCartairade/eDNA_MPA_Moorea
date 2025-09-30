@@ -354,11 +354,12 @@ my_Permanova(dist = dist.jc.both$beta.jac, sample_dist = subset(sample, Sampling
 my_Permanova(dist = dist.bc.both, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" ))
 ```
 ### Figure 5 and 6 : Canonical Analysis of Principal coordinates
-
+Jaccard distance CAP
 <p align="center">
   <img src="Figures/Figure5.PNG" alt="Figure 5" class="center" width="50%"/>
 </p>
 
+Bray-Curtis distance CAP 
 <p align="center">
   <img src="Figures/Figure6.PNG" alt="Figure 6" class="center" width="50%"/>
 </p>
