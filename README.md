@@ -114,8 +114,8 @@ Tax_melt_wVC <- Tax_melt_wVC[,c("Sample.ID", "Marine.Area","Sampling.Site", "Coa
 Tax_table_wVC <- reshape2::acast(Tax_melt_wVC, value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
 ```
 
-##  Map of Moorea showing the Marine Protected Area (MPAs) and sampling locations
-### Figure 1
+##  Generating Figures from the paper
+### Figure 1: Map of Moorea showing the Marine Protected Area (MPAs) and sampling locations
 <p align="center">
   <img src="Figures/Figure1.PNG" alt="Figure 1" class="center" width="50%"/>
 </p>
@@ -193,8 +193,7 @@ ggplot() +
 
 ggsave(path = Images_path, file = "Figure1.pdf", height = 7, width = 7)  
 ```
-## Community composition overview
-### Figure 2
+### Figure 2: Venn diagram
 <p align="center">
   <img src="Figures/Figure2.PNG" alt="Figure 2" class="center" width="50%"/>
 </p>
@@ -215,8 +214,7 @@ gridExtra::grid.arrange(p1, p2, ncol = 2, padding = unit(1, "cm"), top = grid::t
 
 dev.off()
 ```
-
-### Figure 3
+### Figure 3: Species count per Family
 <p align="center">
   <img src="Figures/Figure3.PNG" alt="Figure 3" class="center" width="50%"/>
 </p>
@@ -268,7 +266,7 @@ p1
 
 ggsave(path = Images_path, file = "Figure3.pdf", width = 6.5, height = 5)
 ```
-### Figure 4
+### Figure 4: Community composition overview per Family
 <p align="center">
   <img src="Figures/Figure4.PNG" alt="Figure 4" class="center" width="50%"/>
 </p>
@@ -288,14 +286,14 @@ df_plot <- Tax_melt_wVC %>%
   mutate(prop = 100 * reads / sum(reads)) %>%
   ungroup()
 
-# Ordre des familles (plus abondantes en haut)
+# Order of families (most abundant on top)
 family_order <- df_plot %>%
   group_by(Family) %>%
   summarise(sum_prop = sum(prop, na.rm = TRUE), .groups = "drop") %>%
   arrange(desc(sum_prop)) %>%
   pull(Family)
 
-# Compléter et créer les facteurs
+# Complete missing combinations and create factors
 df_plot <- df_plot %>%
   complete(Family, Sample.Type, Taxon, fill = list(reads = 0, prop = 0)) %>%
   mutate(
@@ -308,7 +306,7 @@ df_plot <- df_plot %>%
     )
   )
 
-# Sélection des 20 plus abondants
+# Selection of the 20 most abundant taxa
 taxon_stats <- df_plot %>%
   group_by(Taxon) %>%
   summarise(total_prop = sum(prop, na.rm = TRUE), .groups = "drop") %>%
@@ -316,7 +314,7 @@ taxon_stats <- df_plot %>%
 
 top_taxa <- head(taxon_stats$Taxon, 20)
 
-# Remplacement + ordre d’empilement
+# Replacement + stacking order
 taxon_order <- c(top_taxa, setdiff(taxon_stats$Taxon, top_taxa), "Other")
 
 df_plot <- df_plot %>%
@@ -358,7 +356,7 @@ p
 
 ggsave(path = Images_path, file = "Figure4.pdf", width = 10, height = 12)
 ```
-## Community structure
+### Community structure
 Data initialisation 
 ```r
 sample <- Tax_melt_wVC %>% 
@@ -434,7 +432,7 @@ my_Permanova <- function(dist, sample_dist)
 my_Permanova(dist = dist.jc.both$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B"))
 my_Permanova(dist = dist.bc.both, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" ))
 ```
-### Figure 5 and 6 : Canonical Analysis of Principal coordinates
+### Figure 5 and 6 : Constrained Analysis of Principal Coordinates (CAP)
 Jaccard distance CAP
 <p align="center">
   <img src="Figures/Figure5.PNG" alt="Figure 5" class="center" width="50%"/>
