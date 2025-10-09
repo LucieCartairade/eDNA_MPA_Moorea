@@ -489,11 +489,11 @@ my_CAP <- function(dist, n_arrows) {
   
   
   p <- ggplot(site_df, aes(x = CAP1, y = CAP2)) +
-    stat_ellipse(aes(color = Sample.Type, linetype = Habitat),
-                 type = "norm", level = 0.92, size = 0.75) + 
+    stat_ellipse(aes(color = Sample.Type),
+                 type = "norm", level = 0.97, size = 0.75) + 
     scale_color_viridis_d(option = "magma", begin = 0.45, end = 0.75) +
     ggnewscale::new_scale_color() +
-    geom_point(aes(color = Coast, shape = Marine.Area), size = 2)  + 
+    geom_point(aes(color = Habitat, shape = Marine.Area), size = 2)  + 
     scale_color_viridis_d(option = "viridis", begin = 0.4) +
     geom_segment(data = arrows_select, aes(x = 0, y = 0, xend = CAP1, yend = CAP2), 
                  arrow = arrow(length = unit(0.2, "cm")), color = "gray", linewidth = 0.5) +
