@@ -1,8 +1,8 @@
-These R scripts reproduce the figures from the paper:
-Evaluating the effect of MPAs based on eDNA monitoring and visual census comparison
+These R scripts reproduce the figures presented in the paper:
+Evaluating the Effect of Marine Protected Areas (MPAs) Based on eDNA Monitoring and Visual Census Comparison
 DOI
 
-Methodological choices and the bioinformatics pipeline are described in:
+The methodological choices and the bioinformatics pipeline are described in:
 Optimizing a novel eDNA-based framework for Reef Fish Biodiversity monitoring using an Autonomous Filtration System and in situ Nanopore Sequencing
 DOI
 https://github.com/LucieCartairade/eDNA_Methodology
@@ -19,12 +19,12 @@ library(patchwork)
 theme_set(theme_bw())
 source("Functions.R")
 
-# Reading metadatas file
-metadatas <- read.csv(file = "metadatas.csv", header = T, sep = ";", dec = ",", na.strings = "NA", fileEncoding = "ISO-8859-1")
-metadatas$Barcod <- sprintf("%02d",metadatas$Barcod)
-metadatas$Run_Barcod <- paste0(metadatas$Run.name,"_barcode",metadatas$Barcod,"_concatenated")
+# Reading metadata file
+metadata <- read.csv(file = "metadata.csv", header = T, sep = ";", dec = ",", na.strings = "NA", fileEncoding = "ISO-8859-1")
+metadata$Barcod <- sprintf("%02d",metadata$Barcod)
+metadata$Run_Barcod <- paste0(metadata$Run.name,"_barcode",metadata$Barcod,"_concatenated")
 
-# Reading Correction file to stay update and be consistant between UCV and eDNA results
+# Reading Correction file to stay up to date and be consistent between UVC and eDNA results
 corr_species <- read.csv2("correction_species_final.csv")
 corr_family <- read.csv2("correction_family_final.csv")
 
@@ -45,16 +45,16 @@ Tab_rar <- as.data.frame(t(Tab_rar))
 Tab_rar$clusters.id <- row.names(Tab_rar)
 Res_rar <- dplyr::right_join(as.data.frame(Res)[,c(1:14)], Tab_rar, by = c("clusters.id" = "clusters.id"))
 
-# Transforming data to merge with metadatas 
-Res_melt <- reshape2::melt(Res[,c(1,15:dim(Res)[2])], id = "clusters.id", variable.name = "Run_Barcod", value.name = "Nb.reads")
-Res_melt <- Res_melt[Res_melt$Nb.reads != 0,]
-Res_melt <- merge(Res_melt,Res[,c(1:(14))], by = "clusters.id", all = T)
-Res_melt <- merge(Res_melt, metadatas[,c("Run_Barcod","Sample.ID","Sampling.Site", "Marine.Area","Replica", "Habitat", "Coast")], by = "Run_Barcod", all = T)
+# Transforming data to merge with metadata 
+Res_melt_rar <- reshape2::melt(Res_rar[,c(1,15:dim(Res_rar)[2])], id = "clusters.id", variable.name = "Run_Barcod", value.name = "Nb.reads")
+Res_melt_rar <- Res_melt_rar[Res_melt_rar$Nb.reads != 0,]
+Res_melt_rar <- merge(Res_melt_rar,Res[,c(1:(14))], by = "clusters.id", all = T)
+Res_melt_rar <- merge(Res_melt_rar, metadata[,c("Run_Barcod","Sample.ID","Sampling.Site", "Marine.Area","Replica", "Habitat", "Coast")], by = "Run_Barcod", all = T)
 # Removing samples that haven't any result
-Res_melt <- Res_melt[!is.na(Res_melt$clusters.id),] 
+Res_melt_rar <- Res_melt_rar[!is.na(Res_melt_rar$clusters.id),] 
 # Creating Taxon column
-Res_melt[which(is.na(Res_melt$Family)),c("Family","Genus","Species")] <- "unknown"
-Res_melt$Taxon <- ifelse(is.na(Res_melt$Genus), Res_melt$Family,paste(Res_melt$Genus, Res_melt$Species))
+Res_melt_rar[which(is.na(Res_melt_rar$Family)),c("Family","Genus","Species")] <- "unknown"
+Res_melt_rar$Taxon <- ifelse(is.na(Res_melt_rar$Genus), Res_melt_rar$Family,paste(Res_melt_rar$Genus, Res_melt_rar$Species))
 
 # Aggregating to Species level
 Tax_melt <- Res_melt_rar %>%
@@ -120,12 +120,12 @@ Tax_table_wVC <- reshape2::acast(Tax_melt_wVC, value.var = "relative_biomass", T
   <img src="Figures/Figure1.PNG" alt="Figure 1" class="center" width="75%"/>
 </p>
 
-Shapes files available at : https://www.tefenua.data.gov.pf
+Shapefiles available at : https://www.tefenua.data.gov.pf
 and : https://www.tefenua.data.gov.pf/datasets/ef2bdc8e55f049318a3888f8134349b0_0/explore?location=-17.535984%2C-149.840113%2C11.48
 ```r
 library(sf)
 
-### Reads Files
+### Read Files
 my_sf <- read_sf(paste0(Datas_path,"Moorea/WGS84_TraitDeCote.shp"), options = "ENCODING=UTF-8")
 sf_Moorea <- my_sf %>% filter(ILE == "MOOREA")
 
@@ -227,6 +227,7 @@ df_count <- Tax_melt_wVC %>%
   group_by(Sample.Type, Family) %>%
   summarise(count = n(), .groups = "drop")
 
+
 # Define order of families: first by total species count, second by presence in both methods
 family_order <- df_count %>%
   group_by(Family) %>%
@@ -238,17 +239,16 @@ family_order <- df_count %>%
   arrange(sum_count, desc(both_methods)) %>%  
   pull(Family)
 
+
 # Complete the dataset with missing combinations Family x Sample.Type,
-# fill with zeros, and prepare mirrored values for plotting
+# fill with zeros
 df_count <- df_count %>%
   tidyr::complete(Sample.Type, Family, fill = list(count = 0)) %>%
   mutate(Family = factor(Family, levels = family_order),
-         Sample.Type = factor(Sample.Type, levels = c("eDNA", "UVC")),
-         count_plot = ifelse(Sample.Type == "eDNA", count, count)) 
+         Sample.Type = factor(Sample.Type, levels = c("eDNA", "UVC"))) 
 
-# Build mirrored barplot: negative values for eDNA, positive for UVC
-p1 <- ggplot(df_count, aes(x = Family, y = count_plot, fill = Sample.Type)) +
-  geom_bar(stat = "identity", position = position.dodge(), width = 0.5) +
+p1 <- ggplot(df_count, aes(x = Family, y = count, fill = Sample.Type)) +
+  geom_bar(stat = "identity", position=position_dodge(), width = 0.6) +
   scale_fill_manual(values = c("eDNA"= "#8f226e", "UVC" = "#f18055")) +
   scale_y_continuous(labels = abs) +
   labs(x = "Family", y = "Species count", fill = "Method") +
@@ -261,7 +261,8 @@ p1 <- ggplot(df_count, aes(x = Family, y = count_plot, fill = Sample.Type)) +
     legend.title = element_text(size = 11),
     legend.text = element_text(size = 10),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4)
-  )
+  ) + 
+  theme_minimal()
 p1
 
 ggsave(path = Images_path, file = "Figure3.pdf", width = 6.5, height = 5)
@@ -328,7 +329,7 @@ main_colors <- getPalette(length(top_taxa))
 speciesPalette <- c(setNames(main_colors, top_taxa), "Other" = "black")
 
 
-p <- ggplot(df_plot, aes(x = Sample.Type, y = prop, fill = Taxon)) +
+p2 <- ggplot(df_plot, aes(x = Sample.Type, y = prop, fill = Taxon)) +
   geom_bar(stat = "identity", width = 0.8) +
   scale_fill_manual(values = speciesPalette) +
   labs(
@@ -352,12 +353,12 @@ p <- ggplot(df_plot, aes(x = Sample.Type, y = prop, fill = Taxon)) +
   ) +
   guides(fill = guide_legend(ncol = 1))
 
-p
+p2
 
 ggsave(path = Images_path, file = "Figure4.pdf", width = 10, height = 12)
 ```
 ### Community structure
-Data initialisation 
+Data initialization 
 ```r
 sample <- Tax_melt_wVC %>% 
   select(Sample.Type, Marine.Area, Sampling.Site, Habitat, Replica, Coast) %>% 
@@ -376,17 +377,17 @@ Tax_table_VC <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" 
                                   value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
 
 ```
-Jaccard and BrayCurtis distance matrices
+Jaccard and Bray-Curtis distance matrices
 ```r
-# Jaccard and Bray Curtis on both Sample.Type
+# Jaccard and Bray-Curtis on both Sample.Type
 dist.jc.both <- betapart::beta.pair(t(ifelse(Tax_table != 0 , 1, 0)), index.family="jaccard")
 dist.bc.both <- vegan::vegdist(t(Tax_table), method = "bray")
 
-# Jaccard and Bray Curtis on eDNA
+# Jaccard and Bray-Curtis on eDNA
 dist.jc.eDNA <- betapart::beta.pair(t(ifelse(Tax_table_eDNA != 0 , 1, 0)), index.family="jaccard")
 dist.bc.eDNA <- vegan::vegdist(t(Tax_table_eDNA), method = "bray")
 
-# Jaccard and Bray Curtis on VC
+# Jaccard and Bray-Curtis on VC
 dist.jc.VC <- betapart::beta.pair(t(ifelse(Tax_table_VC != 0 , 1, 0)), index.family="jaccard")
 dist.bc.VC <- vegan::vegdist(t(Tax_table_VC), method = "bray")
 
@@ -400,7 +401,7 @@ my_pheatmap <- function(dist, name, h, w)
 my_pheatmap(dist = dist.jc.both$beta.jac, name = "Both_Jaccard.svg", h = 20, w = 20 )
 my_pheatmap(dist = dist.bc.both, name = "Both_BrayCurtis.svg", h = 20, w = 20 )
 ```
-PERMANOVA analyses on each method
+PERMANOVA analysis for each method
 ```r 
 my_Permanova <- function(dist, sample_dist)
 {
@@ -417,7 +418,7 @@ my_Permanova(dist = dist.jc.VC$beta.jac, sample_dist = subset(sample, Sampling.S
 my_Permanova(dist = dist.bc.eDNA, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA"))
 my_Permanova(dist = dist.bc.VC, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC"))
 ```
-PERMANOVA analyses on both methods
+PERMANOVA analysis including both methods
 ```r
 my_Permanova <- function(dist, sample_dist)
 {
@@ -432,7 +433,7 @@ my_Permanova <- function(dist, sample_dist)
 my_Permanova(dist = dist.jc.both$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B"))
 my_Permanova(dist = dist.bc.both, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" ))
 ```
-### Figure 5 and 6 : Constrained Analysis of Principal Coordinates (CAP)
+### Figures 5 and 6: Constrained Analysis of Principal Coordinates (CAP)
 Jaccard distance CAP
 <p align="center">
   <img src="Figures/Figure5.PNG" alt="Figure 5" class="center" width="75%"/>
@@ -512,7 +513,7 @@ my_CAP <- function(dist, n_arrows) {
 }
 
 pJ15 <- my_CAP(dist = dist.jc.both$beta.jac, n_arrows = 15)
-pj15
+pJ15
 ggsave(path = paste0(Images_path, "CAP/"), file = "Figure5.pdf", height = 6, width = 7 )
 
 pBC15 <- my_CAP(dist = dist.bc.both, n_arrows = 15)
