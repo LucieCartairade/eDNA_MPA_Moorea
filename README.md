@@ -7,6 +7,113 @@ Optimizing a novel eDNA-based framework for Reef Fish Biodiversity monitoring us
 DOI
 https://github.com/LucieCartairade/eDNA_Methodology
 
+
+## Manage files and set the environment 
+```r
+set.seed(19980822)
+
+# Libraries always needed
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+theme_set(theme_bw())
+source("Functions.R")
+
+# Reading metadatas file
+metadatas <- read.csv(file = "metadatas.csv", header = T, sep = ";", dec = ",", na.strings = "NA", fileEncoding = "ISO-8859-1")
+metadatas$Barcod <- sprintf("%02d",metadatas$Barcod)
+metadatas$Run_Barcod <- paste0(metadatas$Run.name,"_barcode",metadatas$Barcod,"_concatenated")
+
+# Reading Correction file to stay update and be consistant between UCV and eDNA results
+corr_species <- read.csv2("correction_species_final.csv")
+corr_family <- read.csv2("correction_family_final.csv")
+
+# Reading UVC file
+VisualCensus <- read.csv2("VisualCensus.csv")
+
+# Reading Decona result file
+Res <- read.table("BLAST_out_reclustered_summary_tax_seq_counts.txt",sep ="\t", header = T, na.string = "")
+# Removing Homo Sapiens 
+Res <- Res[-which(Res$tax.id == "9606"),] 
+rownames(Res) <- Res$clusters.id
+
+# Rarefying reads
+Tab_raw <- Res[,15:dim(Res)[2]]
+raremax <- min(rowSums(t(Tab_raw), na.rm = T)) 
+Tab_rar <- vegan::rrarefy(t(Tab_raw), raremax)
+Tab_rar <- as.data.frame(t(Tab_rar))
+Tab_rar$clusters.id <- row.names(Tab_rar)
+Res_rar <- dplyr::right_join(as.data.frame(Res)[,c(1:14)], Tab_rar, by = c("clusters.id" = "clusters.id"))
+
+# Transforming data to merge with metadatas 
+Res_melt <- reshape2::melt(Res[,c(1,15:dim(Res)[2])], id = "clusters.id", variable.name = "Run_Barcod", value.name = "Nb.reads")
+Res_melt <- Res_melt[Res_melt$Nb.reads != 0,]
+Res_melt <- merge(Res_melt,Res[,c(1:(14))], by = "clusters.id", all = T)
+Res_melt <- merge(Res_melt, metadatas[,c("Run_Barcod","Sample.ID","Sampling.Site", "Marine.Area","Replica", "Habitat", "Coast")], by = "Run_Barcod", all = T)
+# Removing samples that haven't any result
+Res_melt <- Res_melt[!is.na(Res_melt$clusters.id),] 
+# Creating Taxon column
+Res_melt[which(is.na(Res_melt$Family)),c("Family","Genus","Species")] <- "unknown"
+Res_melt$Taxon <- ifelse(is.na(Res_melt$Genus), Res_melt$Family,paste(Res_melt$Genus, Res_melt$Species))
+
+# Aggregating to Species level
+Tax_melt <- Res_melt_rar %>%
+  group_by(tax.id, Sample.ID, Replica, Family, Taxon, Sampling.Site, Marine.Area, Habitat, Coast) %>%
+  summarise(
+    Nb.reads_sum = sum(Nb.reads),
+    X.ID_mean = weighted.mean(X.ID, Nb.reads),
+    alignment.length_mean = weighted.mean(alignment.length, Nb.reads),
+    mismatches_mean = weighted.mean(mismatches, Nb.reads),
+    gap.opens_mean = weighted.mean(gap.opens, Nb.reads),
+    evalue_mean = weighted.mean(evalue, Nb.reads),
+    bit.score_mean = weighted.mean(bit.score, Nb.reads),
+    qcovs_mean = weighted.mean(qcovs, Nb.reads),
+    sequence_max = sequence[which.max(Nb.reads)][1]
+  ) %>%
+  group_by(Sample.ID) %>%
+  mutate(
+    relative_biomass = 100 * Nb.reads_sum / sum(Nb.reads_sum)
+  ) %>%
+  ungroup()
+
+Tax_melt[which(Tax_melt$bit.score_mean < 250),"Taxon"] <- "unknown"
+Tax_melt[which(Tax_melt$bit.score_mean < 250),"Family"] <- "unknown"
+Tax_melt[which(Tax_melt$bit.score_mean < 250),"X.ID_mean"] <- NA
+
+# Correcting some species and family names
+Tax_melt <- Tax_melt %>%
+  left_join(corr_species, by = c("Taxon" = "original_species")) %>%
+  mutate(Taxon = coalesce(corrected_species, Taxon)) %>%
+  select(-corrected_species) %>%
+  left_join(corr_family, by = c("Taxon" = "species")) %>%
+  mutate(Family = coalesce(corrected_family, Family)) %>%
+  select(-corrected_family)
+
+# Assigning unknown to bitscore < 250 
+Tax_melt$Sample.Type <- "eDNA"
+Tax_melt$Sample.ID <- paste(Tax_melt$Sample.Type, Tax_melt$Marine.Area, Tax_melt$Sampling.Site, Tax_melt$Habitat, Tax_melt$Replica)
+Tax_table <- reshape2::acast(Tax_melt, value.var = "Nb.reads_sum", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
+
+# Joining eDNA table with UVC Table
+Tax_melt_wVC <- dplyr::full_join(Tax_melt, VisualCensus,
+                                 by = c("Taxon" = "Species",
+                                        "Replica" = "Transect", 
+                                        "relative_biomass" = "relative_biomass",
+                                        "Nb.reads_sum" = "Abundance_sum",
+                                        "Sampling.Site" = "Marine Area", 
+                                        "Sample.Type" = "Sample.Type", 
+                                        "Marine.Area" = "Marine.Area", 
+                                        "Habitat" = "Habitat", 
+                                        "Family" = "FAMILY", 
+                                        "Coast" = "Coast"))
+
+Tax_melt_wVC$Sample.ID <- paste(Tax_melt_wVC$Sample.Type, Tax_melt_wVC$Marine.Area, Tax_melt_wVC$Sampling.Site, Tax_melt_wVC$Habitat, Tax_melt_wVC$Replica)
+Tax_melt_wVC <- Tax_melt_wVC[,c("Sample.ID", "Marine.Area","Sampling.Site", "Coast" ,"Habitat","Replica", "Sample.Type", "Family", "Taxon" , "Nb.reads_sum", "relative_biomass")]
+
+# Shaping into table 
+Tax_table_wVC <- reshape2::acast(Tax_melt_wVC, value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
+```
+
 ##  Map of Moorea showing the Marine Protected Area (MPAs) and sampling locations
 ### Figure 1
 <p align="center">
