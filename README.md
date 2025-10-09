@@ -139,11 +139,11 @@ df_count <- df_count %>%
   tidyr::complete(Sample.Type, Family, fill = list(count = 0)) %>%
   mutate(Family = factor(Family, levels = family_order),
          Sample.Type = factor(Sample.Type, levels = c("eDNA", "UVC")),
-         count_plot = ifelse(Sample.Type == "eDNA", -count, count)) 
+         count_plot = ifelse(Sample.Type == "eDNA", count, count)) 
 
 # Build mirrored barplot: negative values for eDNA, positive for UVC
 p1 <- ggplot(df_count, aes(x = Family, y = count_plot, fill = Sample.Type)) +
-  geom_bar(stat = "identity", width = 0.5) +
+  geom_bar(stat = "identity", position = position.dodge(), width = 0.5) +
   scale_fill_manual(values = c("eDNA"= "#8f226e", "UVC" = "#f18055")) +
   scale_y_continuous(labels = abs) +
   labs(x = "Family", y = "Species count", fill = "Method") +
@@ -167,115 +167,89 @@ ggsave(path = Images_path, file = "Figure3.pdf", width = 6.5, height = 5)
 </p>
 
 ```r
-# Table species (Taxon) x Family x Method, with reads
-df_taxa <- Tax_melt_wVC %>% 
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(tidyr)
+
+df_plot <- Tax_melt_wVC %>%
   filter(!is.na(Family), Family != "unknown",
          !is.na(relative_biomass), !is.na(Taxon)) %>%
   group_by(Sample.Type, Family, Taxon) %>%
-  summarise(reads = sum(Nb.reads_sum), .groups = "drop")
-
-# Proportions calculated at the method level (100% per Sample.Type)
-df_taxa <- df_taxa %>%
+  summarise(reads = sum(Nb.reads_sum), .groups = "drop") %>%
   group_by(Sample.Type) %>%
   mutate(prop = 100 * reads / sum(reads)) %>%
   ungroup()
 
-sum(df_taxa$prop)
-
-# Order families by their total contribution (all methods)
-family_order <- df_taxa %>%
+# Ordre des familles (plus abondantes en haut)
+family_order <- df_plot %>%
   group_by(Family) %>%
   summarise(sum_prop = sum(prop, na.rm = TRUE), .groups = "drop") %>%
-  arrange(sum_prop) %>%
+  arrange(desc(sum_prop)) %>%
   pull(Family)
 
-# Prepare the mirror (eDNA negative, UVC positive)
-df_plot <- df_taxa %>%
+# Compléter et créer les facteurs
+df_plot <- df_plot %>%
+  complete(Family, Sample.Type, Taxon, fill = list(reads = 0, prop = 0)) %>%
   mutate(
     Family = factor(Family, levels = family_order),
     Sample.Type = factor(Sample.Type, levels = c("eDNA", "UVC")),
-    prop_plot = ifelse(Sample.Type == "eDNA", -prop, prop)
+    Family_Method = factor(
+      paste(Family, Sample.Type, sep = "_"),
+      levels = unlist(lapply(rev(family_order),
+                             function(f) c(paste0(f, "_eDNA"), paste0(f, "_UVC"))))
+    )
   )
 
-# Species palette 
-RColorBrewer::display.brewer.all(colorblindFriendly = TRUE)
-getPalette = colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))
-speciesList = sample(unique(df_plot$Taxon), length(unique(df_plot$Taxon)))
-speciesPalette = getPalette(length(speciesList))
-names(speciesPalette) = speciesList
+# Sélection des 20 plus abondants
+taxon_stats <- df_plot %>%
+  group_by(Taxon) %>%
+  summarise(total_prop = sum(prop, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(total_prop))
 
-# Main plot: stacked bars by species (Taxon)
-ggplot(df_plot, aes(x = Family, y = prop_plot, fill = Taxon)) +
-  geom_bar(stat = "identity", width = 0.5) +
-  scale_fill_manual(values= speciesPalette) + 
-  scale_y_continuous(labels = function(x) paste0(abs(x), "%")) +
-  labs(x = "Family", y = "Relative biomass estimation (%)", fill = "Taxon") +
+top_taxa <- head(taxon_stats$Taxon, 20)
+
+# Remplacement + ordre d’empilement
+taxon_order <- c(top_taxa, setdiff(taxon_stats$Taxon, top_taxa), "Other")
+
+df_plot <- df_plot %>%
+  mutate(
+    Taxon = ifelse(Taxon %in% top_taxa, Taxon, "Other"),
+    Taxon = factor(Taxon, levels = rev(unique(c(top_taxa, "Other"))))
+  )
+
+getPalette <- colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))
+main_colors <- getPalette(length(top_taxa))
+speciesPalette <- c(setNames(main_colors, top_taxa), "Other" = "black")
+
+
+p <- ggplot(df_plot, aes(x = Sample.Type, y = prop, fill = Taxon)) +
+  geom_bar(stat = "identity", width = 0.8) +
+  scale_fill_manual(values = speciesPalette) +
+  labs(
+    x = "Family by Method",
+    y = "Relative biomass estimation (%)",
+    fill = "Taxon"
+  ) +
   coord_flip() +
+  facet_grid(rows = vars(Family), scales = "free_y", space = "free_y", switch = "y") +
+  theme_minimal() +
   theme(
-    axis.text.y = element_text(size = 10),
+    strip.placement = "outside",
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 9),
+    axis.text.y = element_text(size = 7),
     axis.text.x = element_text(size = 10),
     axis.title  = element_text(size = 12),
-    legend.position="none",
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4)
-  )+
-  annotate("text", x = length(unique(df_plot$Family)) - 3, y = -40, label = "eDNA", size = 5) +
-  annotate("text", x = length(unique(df_plot$Family)) - 3, y =  40, label = "UVC", size = 5)
-
-ggsave(path = Images_path, file = "Figure4.pdf", width = 6.5, height = 5)
-```
-### Figure 4 bis
-<p align="center">
-  <img src="Figures/Figure4bis.PNG" alt="Figure 4" class="center" width="50%"/>
-</p>
-
-```r
-# Count number of species (Taxon) per Family and Sample.Type
-df_count <- Tax_melt_wVC %>%
-  filter(!is.na(Family), !is.na(Taxon), Taxon != "unknown") %>%
-  distinct(Sample.Type, Family, Taxon) %>%
-  group_by(Sample.Type, Family) %>%
-  summarise(count = n(), .groups = "drop")
-
-# Define order of families: first by total species count, second by presence in both methods
-family_order <- df_count %>%
-  group_by(Family) %>%
-  summarise(
-    sum_count = sum(count, na.rm = TRUE),
-    both_methods = as.integer(n_distinct(Sample.Type[count > 0]) == 2),
-    .groups = "drop"
-  ) %>%
-  arrange(sum_count, desc(both_methods)) %>%  
-  pull(Family)
-
-# Complete the dataset with missing Family x Sample.Type combinations,
-# fill with zeros, and prepare mirrored values for plotting
-df_count <- df_count %>%
-  tidyr::complete(Sample.Type, Family, fill = list(count = 0)) %>%
-  mutate(Family = factor(Family, levels = family_order),
-         Sample.Type = factor(Sample.Type, levels = c("eDNA", "UVC")),
-         count_plot = ifelse(Sample.Type == "eDNA", -count, count)) 
-
-# Build mirrored barplot: negative values for eDNA, positive for UVC
-p1 <- ggplot(df_count, aes(x = Family, y = count_plot, fill = Sample.Type)) +
-  geom_bar(stat = "identity", width = 0.5) +
-  scale_fill_manual(values = c("eDNA"= "#8f226e", "UVC" = "#f18055")) +
-  scale_y_continuous(labels = abs) +
-  labs(x = "Family", y = "Species count", fill = "Method") +
-  coord_flip() +
-  #theme_classic(base_size = 12) +
-  theme(
-    axis.text.y = element_text(size = 10),
-    axis.text.x = element_text(size = 10),
-    axis.title = element_text(size = 12),
-    legend.position = "top",
     legend.title = element_text(size = 11),
     legend.text = element_text(size = 10),
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4)
-  )
-p1
+    legend.position = "right",
+    panel.spacing = unit(0.05, "lines")
+  ) +
+  guides(fill = guide_legend(ncol = 1))
 
-ggsave(path = Images_path, filename = "Figure4.pdf", width = 10, height = 7)
+p
 
+ggsave(path = Images_path, file = "Figure4.pdf", width = 10, height = 12)
 ```
 ## Community structure
 Data initialisation 
