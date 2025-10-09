@@ -17,7 +17,6 @@ library(ggplot2)
 library(dplyr)
 library(patchwork)
 theme_set(theme_bw())
-source("Functions.R")
 
 # Reading metadata file
 metadata <- read.csv(file = "metadata.csv", header = T, sep = ";", dec = ",", na.strings = "NA", fileEncoding = "ISO-8859-1")
