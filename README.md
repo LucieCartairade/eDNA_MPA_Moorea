@@ -117,7 +117,7 @@ Tax_table_wVC <- reshape2::acast(Tax_melt_wVC, value.var = "relative_biomass", T
 ##  Generating Figures from the paper
 ### Figure 1: Map of Moorea showing the Marine Protected Area (MPAs) and sampling locations
 <p align="center">
-  <img src="Figures/Figure1.PNG" alt="Figure 1" class="center" width="50%"/>
+  <img src="Figures/Figure1.PNG" alt="Figure 1" class="center" width="75%"/>
 </p>
 
 Shapes files available at : https://www.tefenua.data.gov.pf
@@ -195,7 +195,7 @@ ggsave(path = Images_path, file = "Figure1.pdf", height = 7, width = 7)
 ```
 ### Figure 2: Venn diagram
 <p align="center">
-  <img src="Figures/Figure2.PNG" alt="Figure 2" class="center" width="50%"/>
+  <img src="Figures/Figure2.PNG" alt="Figure 2" class="center" width="75%"/>
 </p>
 
 ```r
@@ -216,7 +216,7 @@ dev.off()
 ```
 ### Figure 3: Species count per Family
 <p align="center">
-  <img src="Figures/Figure3.PNG" alt="Figure 3" class="center" width="50%"/>
+  <img src="Figures/Figure3.PNG" alt="Figure 3" class="center" width="75%"/>
 </p>
 
 ```r
@@ -268,7 +268,7 @@ ggsave(path = Images_path, file = "Figure3.pdf", width = 6.5, height = 5)
 ```
 ### Figure 4: Community composition overview per Family
 <p align="center">
-  <img src="Figures/Figure4.PNG" alt="Figure 4" class="center" width="50%"/>
+  <img src="Figures/Figure4.PNG" alt="Figure 4" class="center" width="75%"/>
 </p>
 
 ```r
@@ -435,12 +435,12 @@ my_Permanova(dist = dist.bc.both, sample_dist = subset(sample, Sampling.Site != 
 ### Figure 5 and 6 : Constrained Analysis of Principal Coordinates (CAP)
 Jaccard distance CAP
 <p align="center">
-  <img src="Figures/Figure5.PNG" alt="Figure 5" class="center" width="50%"/>
+  <img src="Figures/Figure5.PNG" alt="Figure 5" class="center" width="75%"/>
 </p>
 
 Bray-Curtis distance CAP 
 <p align="center">
-  <img src="Figures/Figure6.PNG" alt="Figure 6" class="center" width="50%"/>
+  <img src="Figures/Figure6.PNG" alt="Figure 6" class="center" width="75%"/>
 </p>
 
 ```r
