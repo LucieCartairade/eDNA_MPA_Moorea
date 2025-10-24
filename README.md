@@ -192,13 +192,270 @@ ggplot() +
 
 ggsave(path = Images_path, file = "Figure1.pdf", height = 7, width = 7)  
 ```
-### Figure 2: Venn diagram
+### Figure 2
 <p align="center">
   <img src="Figures/Figure2.PNG" alt="Figure 2" class="center" width="75%"/>
 </p>
 
 ```r
-pdf(file = paste0(Images_path, "Figure2.pdf"), width = 10, height = 5)
+library(phyloseq)
+library(ggplot2)
+library(patchwork)
+library(gghalves)
+
+##### Phyloseq on Tax table with Visual Census #### 
+# OTUs object for phyloseq
+OTUs <- phyloseq::otu_table(as.data.frame(ifelse(Tax_table_wVC != 0,1,0)), taxa_are_rows = T)
+
+# TAX object for phyloseq
+Tax_melt_wVC_wV <- merge(Tax_melt_wVC, Vulnerability, by.x = "Taxon", by.y = "Species", all.x = T)
+Tax_melt_wVC_wV$Cryptobenthic <- ifelse(Tax_melt_wVC_wV$Family %in% CRF,T, F)
+Tax_melt_wVC_wV$Fished <- ifelse(Tax_melt_wVC_wV$Taxon %in% Fished,T, F)
+TAX = data.frame(unique(Tax_melt_wVC_wV[c("Family", "Taxon", "Vulnerability", "Cryptobenthic", "Fished")]), row.names = unique(Tax_melt_wVC_wV$Taxon))
+names(TAX) <-  c("Family", "Species", "Vulnerability", "Cryptobenthic", "Fished")
+TAX <- phyloseq::tax_table(as.matrix(TAX))
+
+# SAMPLE object for phyloseq
+sample <- Tax_melt_wVC %>% 
+  select(Sample.Type, Marine.Area, Coast, Sampling.Site, Habitat, Replica) %>% 
+  group_by(Sample.Type, Marine.Area, Coast, Sampling.Site, Habitat, Replica) %>%
+  summarise()
+sample <- as.data.frame(sample)#
+rownames(sample) <- paste(sample$Sample.Type, sample$Marine.Area, sample$Sampling.Site, sample$Habitat, sample$Replica)
+
+SAMPLE <- phyloseq::sample_data(sample)
+physeq <- phyloseq::phyloseq(OTUs, TAX, SAMPLE)
+
+
+make_panel <- function(ps) {
+  plot_richness(ps, x = "Marine.Area", measures = "Observed")$data |>
+    ggplot(aes(Marine.Area, value, fill = Marine.Area)) +
+    gghalves::geom_half_violin(side = "l", aes(colour = Marine.Area)) +
+    gghalves::geom_half_point(side = "r", size = 1.2, alpha = 0.6) +
+    stat_summary(fun = median, geom = "crossbar", width = 0.4, fatten = 2) +
+    facet_grid(~Sample.Type) +
+    labs(x = "", y = "Species richness") +
+    scale_fill_brewer(-1) +
+    scale_colour_brewer(-1) +
+    theme_pub
+}
+
+MPA_nMPA_eDNA_UVC <- function(physeq)
+{
+  theme_pub <- theme_classic(base_size = 11) +
+    theme(
+      legend.position = "none",
+      axis.title = element_text(size = 11),
+      axis.text = element_text(size = 9),
+      strip.background = element_blank(),
+      strip.text = element_text(face = "bold", size = 10),
+      plot.tag = element_text(face = "bold", size = 14)
+    ) 
+  
+  ## A — Richesse totale
+  pA <- make_panel(physeq) +
+    scale_fill_brewer() +
+    ggtitle("A. Total species") # + 
+    #scale_y_continuous(limits = c(0, 94))
+  
+  ## B — Espèces rares
+  pB <- make_panel(prune_taxa(taxa_sums(physeq) <= 2, physeq)) + 
+    ggtitle("B. Rare species") +scale_y_continuous(limits = c(0,16))
+  
+  ## C — Cryptobenthiques
+  pC <- make_panel(subset_taxa(physeq, Cryptobenthic == TRUE)) +
+    ggtitle("C. Cryptobenthic species") +
+    scale_y_continuous(limits = c(0, 16))
+  
+  ## D — Espèces pêchées
+  pD <- make_panel(subset_taxa(physeq, Fished == TRUE | Vulnerability > 70)) + 
+    ggtitle("D. Vulnerable species") + 
+    scale_y_continuous(limits = c(0, 16))
+  
+  ## Assemblage
+  final_fig <- pA + pB + pC + pD +
+    plot_layout(widths = c(2,2))
+  return(final_fig)
+
+}
+
+MPA_nMPA_eDNA_UVC(physeq)
+ggsave(path = Images_path, file = "Figure2.pdf", width = 10, height = 10)
+
+MPA_nMPA_eDNA_UVC(phyloseq::prune_taxa(phyloseq::taxa_sums(phyloseq::subset_samples(physeq_origin, Habitat != "Outer slope")) > 0, phyloseq::subset_samples(physeq_origin, Habitat != "Outer slope")))
+ggsave(path = Images_path, file = "SupFigure2.pdf", width = 10, height = 10)
+```
+### Community structure
+Data initialization 
+```r
+sample <- Tax_melt_wVC %>% 
+  select(Sample.Type, Marine.Area, Sampling.Site, Habitat, Replica, Coast) %>% 
+  group_by(Sample.Type, Marine.Area, Sampling.Site, Habitat, Replica, Coast) %>%
+  summarise()
+sample <- as.data.frame(sample)
+rownames(sample) <- paste(sample$Sample.Type, sample$Marine.Area, sample$Sampling.Site, sample$Habitat, sample$Replica)
+
+Tax_table <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Family != "unknown"), 
+                                 value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
+
+Tax_table_eDNA <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA" & Family != "unknown"), 
+                                 value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
+
+Tax_table_VC <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC" & Family != "unknown"), 
+                                  value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
+
+```
+Jaccard and Bray-Curtis distance matrices
+```r
+# Jaccard and Bray-Curtis on both Sample.Type
+dist.jc.both <- betapart::beta.pair(t(ifelse(Tax_table != 0 , 1, 0)), index.family="jaccard")
+dist.bc.both <- vegan::vegdist(t(Tax_table), method = "bray")
+
+# Jaccard and Bray-Curtis on eDNA
+dist.jc.eDNA <- betapart::beta.pair(t(ifelse(Tax_table_eDNA != 0 , 1, 0)), index.family="jaccard")
+dist.bc.eDNA <- vegan::vegdist(t(Tax_table_eDNA), method = "bray")
+
+# Jaccard and Bray-Curtis on VC
+dist.jc.VC <- betapart::beta.pair(t(ifelse(Tax_table_VC != 0 , 1, 0)), index.family="jaccard")
+dist.bc.VC <- vegan::vegdist(t(Tax_table_VC), method = "bray")
+
+# Heatmap of matrix of distance
+my_pheatmap <- function(dist, name, h, w)
+{
+  my_plot <- pheatmap::pheatmap(as.matrix(dist), cluster_rows = F, cluster_cols = F, cellwidth = 9, cellheight = 9)
+  my_plot
+  ggsave(path = paste0(Images_path, "Dissimilarity Matrix/"), file = name, plot = my_plot, height = h, width = w )
+}
+my_pheatmap(dist = dist.jc.both$beta.jac, name = "Both_Jaccard.svg", h = 20, w = 20 )
+my_pheatmap(dist = dist.bc.both, name = "Both_BrayCurtis.svg", h = 20, w = 20 )
+```
+PERMANOVA analysis for each method
+```r 
+my_Permanova <- function(dist, sample_dist)
+{
+  set.seed(19980822)
+  vegan::adonis2(
+    dist ~ Marine.Area + Sampling.Site + Sampling.Site:Habitat,
+    data = sample_dist, 
+    permutations = 10000, 
+    strata = sample_dist$Habitat)
+}
+my_Permanova(dist = dist.jc.eDNA$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA"))
+my_Permanova(dist = dist.jc.VC$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC"))
+
+my_Permanova(dist = dist.bc.eDNA, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA"))
+my_Permanova(dist = dist.bc.VC, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC"))
+```
+PERMANOVA analysis including both methods
+```r
+my_Permanova <- function(dist, sample_dist)
+{
+  set.seed(19980822)
+  vegan::adonis2(
+    dist ~ Sample.Type + Marine.Area + Sampling.Site + Sampling.Site:Habitat,
+    data = sample_dist, 
+    permutations = 99999, 
+    strata = sample_dist$Habitat
+    )
+}
+my_Permanova(dist = dist.jc.both$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B"))
+my_Permanova(dist = dist.bc.both, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" ))
+```
+### Figures 5 and 6: Constrained Analysis of Principal Coordinates (CAP)
+Jaccard distance CAP
+<p align="center">
+  <img src="Figures/Figure3.PNG" alt="Figure 3" class="center" width="75%"/>
+</p>
+
+Bray-Curtis distance CAP 
+<p align="center">
+  <img src="Figures/Figure4.PNG" alt="Figure 4" class="center" width="75%"/>
+</p>
+
+```r
+my_CAP <- function(dist, n_arrows) {
+  cap <- vegan::capscale(dist  ~ Sample.Type + Marine.Area + Sampling.Site + Sampling.Site:Habitat,
+                         data = subset(sample, Sampling.Site != "Control" & Replica != "B"))
+  cap
+  summary(cap)
+  anova(cap, permutations = 999, by = "terms")
+  
+  ef <- vegan::envfit(cap, vegan::decostand(t(Tax_table), method = "hellinger"), perm = 999)
+  
+  eig <- cap$CCA$eig
+  eig_perc <- eig / sum(eig) * 100
+  eig_perc[1:2]
+  
+  vec <- ef$vectors$arrows
+  pvals <- ef$vectors$pvals
+  
+  vec_scaled <- vec * sqrt(ef$vectors$r)
+  arrow_lengths <- sqrt(rowSums(vec_scaled^2))
+  
+  pvals <- pvals[pvals < 0.05]
+  arrow_lengths <- arrow_lengths[names(arrow_lengths) %in% names(pvals)]
+  top_idx <- names(sort(arrow_lengths, decreasing = TRUE))[1:15]
+  
+  ef_subset <- ef
+  ef_subset$vectors$arrows <- ef$vectors$arrows[top_idx, , drop = FALSE]
+  ef_subset$vectors$r <- ef$vectors$r[top_idx]
+  ef_subset$vectors$pvals <- ef$vectors$pvals[top_idx]
+  
+  site_df <- as.data.frame(vegan::scores(cap, display = "sites"))
+  site_df <- merge(site_df, subset(sample, Sampling.Site != "Control" & Replica != "B"), by = "row.names")
+  rownames(site_df) <- site_df$Row.names; site_df$Row.names <- NULL
+  
+  arrows <- as.data.frame(ef$vectors$arrows)
+  arrows$species <- rownames(arrows)
+  arrows$length <- ef$vectors$r
+  arrows$pval <- ef$vectors$pvals
+  
+  arrows <- subset(arrows, pval < 0.05)
+  arrows <- arrows[order(arrows$length, decreasing = TRUE),]
+  arrows_select <- arrows[1:n_arrows,]
+  
+  
+  p <- ggplot(site_df, aes(x = CAP1, y = CAP2)) +
+    stat_ellipse(aes(color = Sample.Type),
+                 type = "norm", level = 0.97, size = 0.75) + 
+    scale_color_viridis_d(option = "magma", begin = 0.45, end = 0.75) +
+    ggnewscale::new_scale_color() +
+    geom_point(aes(color = Habitat, shape = Marine.Area), size = 2)  + 
+    scale_color_viridis_d(option = "viridis", begin = 0.4) +
+    geom_segment(data = arrows_select, aes(x = 0, y = 0, xend = CAP1, yend = CAP2), 
+                 arrow = arrow(length = unit(0.2, "cm")), color = "gray", linewidth = 0.5) +
+    ggrepel::geom_text_repel(data = arrows_select,
+                             aes(x = CAP1 * 1.1, y = CAP2 * 1.1, 
+                                 label = paste0("italic('", species, "')")), 
+                             color = "gray50", size = 3, 
+                             max.overlaps = 1000, segment.color = NA,
+                             parse = TRUE) + 
+    scale_linetype_manual(values = c(3, 2, 1)) + 
+    guides(shape = guide_legend(order = 1)) + 
+    labs(
+      x = paste0("CAP1 (", round(eig_perc[1], 1), "%)"),
+      y = paste0("CAP2 (", round(eig_perc[2], 1), "%)")
+    )
+
+  return(p)
+}
+
+pJ15 <- my_CAP(dist = dist.jc.both$beta.jac, n_arrows = 15)
+pJ15
+ggsave(path = paste0(Images_path, "CAP/"), file = "Figure5.pdf", height = 6, width = 7 )
+
+pBC15 <- my_CAP(dist = dist.bc.both, n_arrows = 15)
+pBC15
+ggsave(path = paste0(Images_path, "CAP/"), file = "Figure6.pdf", height = 6, width = 7 )
+```
+
+### Supplementary Figure 1: Venn Diagramm
+<p align="center">
+  <img src="Figures/SupFig1.PNG" alt="SupFig1" class="center" width="75%"/>
+</p>
+
+```r
+pdf(file = paste0(Images_path, "SupFigure2.pdf"), width = 10, height = 5)
 set.seed(10)
 
 Tab_Euler_1 <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Family != "unknown"), value.var = "relative_biomass", Taxon ~ Sample.Type, fill = 0, fun.aggregate = sum)
@@ -215,7 +472,7 @@ dev.off()
 ```
 ### Figure 3: Species count per Family
 <p align="center">
-  <img src="Figures/Figure3.PNG" alt="Figure 3" class="center" width="75%"/>
+  <img src="Figures/SupFig3.PNG" alt="SupFigure 3" class="center" width="75%"/>
 </p>
 
 ```r
@@ -264,11 +521,14 @@ p1 <- ggplot(df_count, aes(x = Family, y = count, fill = Sample.Type)) +
   theme_minimal()
 p1
 
-ggsave(path = Images_path, file = "Figure3.pdf", width = 6.5, height = 5)
+ggsave(path = Images_path, file = "SupFigure3.pdf", width = 6.5, height = 5)
 ```
+
+
+
 ### Figure 4: Community composition overview per Family
 <p align="center">
-  <img src="Figures/Figure4.PNG" alt="Figure 4" class="center" width="75%"/>
+  <img src="Figures/SupFig4.PNG" alt="SupFigure 4" class="center" width="75%"/>
 </p>
 
 ```r
@@ -354,168 +614,5 @@ p2 <- ggplot(df_plot, aes(x = Sample.Type, y = prop, fill = Taxon)) +
 
 p2
 
-ggsave(path = Images_path, file = "Figure4.pdf", width = 10, height = 12)
-```
-### Community structure
-Data initialization 
-```r
-sample <- Tax_melt_wVC %>% 
-  select(Sample.Type, Marine.Area, Sampling.Site, Habitat, Replica, Coast) %>% 
-  group_by(Sample.Type, Marine.Area, Sampling.Site, Habitat, Replica, Coast) %>%
-  summarise()
-sample <- as.data.frame(sample)
-rownames(sample) <- paste(sample$Sample.Type, sample$Marine.Area, sample$Sampling.Site, sample$Habitat, sample$Replica)
-
-Tax_table <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Family != "unknown"), 
-                                 value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
-
-Tax_table_eDNA <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA" & Family != "unknown"), 
-                                 value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
-
-Tax_table_VC <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC" & Family != "unknown"), 
-                                  value.var = "relative_biomass", Taxon~Sample.ID, fill = 0, fun.aggregate = sum)
-
-```
-Jaccard and Bray-Curtis distance matrices
-```r
-# Jaccard and Bray-Curtis on both Sample.Type
-dist.jc.both <- betapart::beta.pair(t(ifelse(Tax_table != 0 , 1, 0)), index.family="jaccard")
-dist.bc.both <- vegan::vegdist(t(Tax_table), method = "bray")
-
-# Jaccard and Bray-Curtis on eDNA
-dist.jc.eDNA <- betapart::beta.pair(t(ifelse(Tax_table_eDNA != 0 , 1, 0)), index.family="jaccard")
-dist.bc.eDNA <- vegan::vegdist(t(Tax_table_eDNA), method = "bray")
-
-# Jaccard and Bray-Curtis on VC
-dist.jc.VC <- betapart::beta.pair(t(ifelse(Tax_table_VC != 0 , 1, 0)), index.family="jaccard")
-dist.bc.VC <- vegan::vegdist(t(Tax_table_VC), method = "bray")
-
-# Heatmap of matrix of distance
-my_pheatmap <- function(dist, name, h, w)
-{
-  my_plot <- pheatmap::pheatmap(as.matrix(dist), cluster_rows = F, cluster_cols = F, cellwidth = 9, cellheight = 9)
-  my_plot
-  ggsave(path = paste0(Images_path, "Dissimilarity Matrix/"), file = name, plot = my_plot, height = h, width = w )
-}
-my_pheatmap(dist = dist.jc.both$beta.jac, name = "Both_Jaccard.svg", h = 20, w = 20 )
-my_pheatmap(dist = dist.bc.both, name = "Both_BrayCurtis.svg", h = 20, w = 20 )
-```
-PERMANOVA analysis for each method
-```r 
-my_Permanova <- function(dist, sample_dist)
-{
-  set.seed(19980822)
-  vegan::adonis2(
-    dist ~ Marine.Area + Sampling.Site + Sampling.Site:Habitat,
-    data = sample_dist, 
-    permutations = 10000, 
-    strata = sample_dist$Habitat)
-}
-my_Permanova(dist = dist.jc.eDNA$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA"))
-my_Permanova(dist = dist.jc.VC$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC"))
-
-my_Permanova(dist = dist.bc.eDNA, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "eDNA"))
-my_Permanova(dist = dist.bc.VC, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" & Sample.Type == "UVC"))
-```
-PERMANOVA analysis including both methods
-```r
-my_Permanova <- function(dist, sample_dist)
-{
-  set.seed(19980822)
-  vegan::adonis2(
-    dist ~ Sample.Type + Marine.Area + Sampling.Site + Sampling.Site:Habitat,
-    data = sample_dist, 
-    permutations = 99999, 
-    strata = sample_dist$Habitat
-    )
-}
-my_Permanova(dist = dist.jc.both$beta.jac, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B"))
-my_Permanova(dist = dist.bc.both, sample_dist = subset(sample, Sampling.Site != "Control" & Replica != "B" ))
-```
-### Figures 5 and 6: Constrained Analysis of Principal Coordinates (CAP)
-Jaccard distance CAP
-<p align="center">
-  <img src="Figures/Figure5.PNG" alt="Figure 5" class="center" width="75%"/>
-</p>
-
-Bray-Curtis distance CAP 
-<p align="center">
-  <img src="Figures/Figure6.PNG" alt="Figure 6" class="center" width="75%"/>
-</p>
-
-```r
-my_CAP <- function(dist, n_arrows) {
-  cap <- vegan::capscale(dist  ~ Sample.Type + Marine.Area + Sampling.Site + Sampling.Site:Habitat,
-                         data = subset(sample, Sampling.Site != "Control" & Replica != "B"))
-  cap
-  summary(cap)
-  anova(cap, permutations = 999, by = "terms")
-  
-  ef <- vegan::envfit(cap, vegan::decostand(t(Tax_table), method = "hellinger"), perm = 999)
-  
-  eig <- cap$CCA$eig
-  eig_perc <- eig / sum(eig) * 100
-  eig_perc[1:2]
-  
-  vec <- ef$vectors$arrows
-  pvals <- ef$vectors$pvals
-  
-  vec_scaled <- vec * sqrt(ef$vectors$r)
-  arrow_lengths <- sqrt(rowSums(vec_scaled^2))
-  
-  pvals <- pvals[pvals < 0.05]
-  arrow_lengths <- arrow_lengths[names(arrow_lengths) %in% names(pvals)]
-  top_idx <- names(sort(arrow_lengths, decreasing = TRUE))[1:15]
-  
-  ef_subset <- ef
-  ef_subset$vectors$arrows <- ef$vectors$arrows[top_idx, , drop = FALSE]
-  ef_subset$vectors$r <- ef$vectors$r[top_idx]
-  ef_subset$vectors$pvals <- ef$vectors$pvals[top_idx]
-  
-  site_df <- as.data.frame(vegan::scores(cap, display = "sites"))
-  site_df <- merge(site_df, subset(sample, Sampling.Site != "Control" & Replica != "B"), by = "row.names")
-  rownames(site_df) <- site_df$Row.names; site_df$Row.names <- NULL
-  
-  arrows <- as.data.frame(ef$vectors$arrows)
-  arrows$species <- rownames(arrows)
-  arrows$length <- ef$vectors$r
-  arrows$pval <- ef$vectors$pvals
-  
-  arrows <- subset(arrows, pval < 0.05)
-  arrows <- arrows[order(arrows$length, decreasing = TRUE),]
-  arrows_select <- arrows[1:n_arrows,]
-  
-  
-  p <- ggplot(site_df, aes(x = CAP1, y = CAP2)) +
-    stat_ellipse(aes(color = Sample.Type),
-                 type = "norm", level = 0.97, size = 0.75) + 
-    scale_color_viridis_d(option = "magma", begin = 0.45, end = 0.75) +
-    ggnewscale::new_scale_color() +
-    geom_point(aes(color = Habitat, shape = Marine.Area), size = 2)  + 
-    scale_color_viridis_d(option = "viridis", begin = 0.4) +
-    geom_segment(data = arrows_select, aes(x = 0, y = 0, xend = CAP1, yend = CAP2), 
-                 arrow = arrow(length = unit(0.2, "cm")), color = "gray", linewidth = 0.5) +
-    ggrepel::geom_text_repel(data = arrows_select,
-                             aes(x = CAP1 * 1.1, y = CAP2 * 1.1, 
-                                 label = paste0("italic('", species, "')")), 
-                             color = "gray50", size = 3, 
-                             max.overlaps = 1000, segment.color = NA,
-                             parse = TRUE) + 
-    scale_linetype_manual(values = c(3, 2, 1)) + 
-    guides(shape = guide_legend(order = 1)) + 
-    labs(
-      x = paste0("CAP1 (", round(eig_perc[1], 1), "%)"),
-      y = paste0("CAP2 (", round(eig_perc[2], 1), "%)")
-    )
-
-  return(p)
-}
-
-pJ15 <- my_CAP(dist = dist.jc.both$beta.jac, n_arrows = 15)
-pJ15
-ggsave(path = paste0(Images_path, "CAP/"), file = "Figure5.pdf", height = 6, width = 7 )
-
-pBC15 <- my_CAP(dist = dist.bc.both, n_arrows = 15)
-pBC15
-ggsave(path = paste0(Images_path, "CAP/"), file = "Figure6.pdf", height = 6, width = 7 )
+ggsave(path = Images_path, file = "SupFigure4.pdf", width = 10, height = 12)
 ```
