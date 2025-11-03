@@ -285,6 +285,29 @@ ggsave(path = Images_path, file = "Figure2.pdf", width = 10, height = 10)
 MPA_nMPA_eDNA_UVC(phyloseq::prune_taxa(phyloseq::taxa_sums(phyloseq::subset_samples(physeq_origin, Habitat != "Outer slope")) > 0, phyloseq::subset_samples(physeq_origin, Habitat != "Outer slope")))
 ggsave(path = Images_path, file = "SupFigure2.pdf", width = 10, height = 10)
 ```
+
+### Figure 3: Venn Diagramm
+<p align="center">
+  <img src="Figures/Figure3.PNG" alt="Fig3" class="center" width="75%"/>
+</p>
+
+```r
+pdf(file = paste0(Images_path, "Figure3.pdf"), width = 10, height = 5)
+set.seed(10)
+
+Tab_Euler_1 <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Family != "unknown"), value.var = "relative_biomass", Taxon ~ Sample.Type, fill = 0, fun.aggregate = sum)
+Tab_Euler_1 <- ifelse(Tab_Euler_1 == 0, FALSE, TRUE)
+p1 <- plot(eulerr::euler(Tab_Euler_1, shape = "ellipse"), quantities = TRUE, main = "A. Species", return_grob = TRUE)
+
+Tab_Euler_2 <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Family != "unknown"), value.var = "relative_biomass", Family ~ Sample.Type, fill = 0, fun.aggregate = sum)
+Tab_Euler_2 <- ifelse(Tab_Euler_2 == 0, FALSE, TRUE)
+p2 <- plot(eulerr::euler(Tab_Euler_2, shape = "ellipse"), quantities = TRUE, main = "B. Family", return_grob = TRUE)
+
+gridExtra::grid.arrange(p1, p2, ncol = 2, padding = unit(1, "cm"), top = grid::textGrob(""), bottom = grid::textGrob(""), left = grid::textGrob(""), right = grid::textGrob(""))
+
+dev.off()
+```
+
 ### Community structure
 Data initialization 
 ```r
@@ -364,12 +387,12 @@ my_Permanova(dist = dist.bc.both, sample_dist = subset(sample, Sampling.Site != 
 ### Figures 5 and 6: Constrained Analysis of Principal Coordinates (CAP)
 Jaccard distance CAP
 <p align="center">
-  <img src="Figures/Figure3.PNG" alt="Figure 3" class="center" width="75%"/>
+  <img src="Figures/Figure4.PNG" alt="Figure 4" class="center" width="75%"/>
 </p>
 
 Bray-Curtis distance CAP 
 <p align="center">
-  <img src="Figures/Figure4.PNG" alt="Figure 4" class="center" width="75%"/>
+  <img src="Figures/Figure5.PNG" alt="Figure 5" class="center" width="75%"/>
 </p>
 
 ```r
@@ -442,37 +465,16 @@ my_CAP <- function(dist, n_arrows) {
 
 pJ15 <- my_CAP(dist = dist.jc.both$beta.jac, n_arrows = 15)
 pJ15
-ggsave(path = paste0(Images_path, "CAP/"), file = "Figure5.pdf", height = 6, width = 7 )
+ggsave(path = paste0(Images_path, "CAP/"), file = "Figure4.pdf", height = 6, width = 7 )
 
 pBC15 <- my_CAP(dist = dist.bc.both, n_arrows = 15)
 pBC15
-ggsave(path = paste0(Images_path, "CAP/"), file = "Figure6.pdf", height = 6, width = 7 )
+ggsave(path = paste0(Images_path, "CAP/"), file = "Figure5.pdf", height = 6, width = 7 )
 ```
 
-### Supplementary Figure 1: Venn Diagramm
+### Supplementary Figure 2 : Species count per Family
 <p align="center">
-  <img src="Figures/SupFig1.PNG" alt="SupFig1" class="center" width="75%"/>
-</p>
-
-```r
-pdf(file = paste0(Images_path, "SupFigure2.pdf"), width = 10, height = 5)
-set.seed(10)
-
-Tab_Euler_1 <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Family != "unknown"), value.var = "relative_biomass", Taxon ~ Sample.Type, fill = 0, fun.aggregate = sum)
-Tab_Euler_1 <- ifelse(Tab_Euler_1 == 0, FALSE, TRUE)
-p1 <- plot(eulerr::euler(Tab_Euler_1, shape = "ellipse"), quantities = TRUE, main = "A. Species", return_grob = TRUE)
-
-Tab_Euler_2 <- reshape2::acast(subset(Tax_melt_wVC, Sampling.Site != "Control" & Replica != "B" & Family != "unknown"), value.var = "relative_biomass", Family ~ Sample.Type, fill = 0, fun.aggregate = sum)
-Tab_Euler_2 <- ifelse(Tab_Euler_2 == 0, FALSE, TRUE)
-p2 <- plot(eulerr::euler(Tab_Euler_2, shape = "ellipse"), quantities = TRUE, main = "B. Family", return_grob = TRUE)
-
-gridExtra::grid.arrange(p1, p2, ncol = 2, padding = unit(1, "cm"), top = grid::textGrob(""), bottom = grid::textGrob(""), left = grid::textGrob(""), right = grid::textGrob(""))
-
-dev.off()
-```
-### Figure 3: Species count per Family
-<p align="center">
-  <img src="Figures/SupFig3.PNG" alt="SupFigure 3" class="center" width="75%"/>
+  <img src="Figures/SupFig2.PNG" alt="SupFigure 2" class="center" width="75%"/>
 </p>
 
 ```r
@@ -521,14 +523,11 @@ p1 <- ggplot(df_count, aes(x = Family, y = count, fill = Sample.Type)) +
   theme_minimal()
 p1
 
-ggsave(path = Images_path, file = "SupFigure3.pdf", width = 6.5, height = 5)
+ggsave(path = Images_path, file = "SupFigure2.pdf", width = 6.5, height = 5)
 ```
-
-
-
-### Figure 4: Community composition overview per Family
+### Suplementary Figre 3: Community composition overview per Family
 <p align="center">
-  <img src="Figures/SupFig4.PNG" alt="SupFigure 4" class="center" width="75%"/>
+  <img src="Figures/SupFig3.PNG" alt="SupFigure 3" class="center" width="75%"/>
 </p>
 
 ```r
@@ -614,5 +613,5 @@ p2 <- ggplot(df_plot, aes(x = Sample.Type, y = prop, fill = Taxon)) +
 
 p2
 
-ggsave(path = Images_path, file = "SupFigure4.pdf", width = 10, height = 12)
+ggsave(path = Images_path, file = "SupFigure3.pdf", width = 10, height = 12)
 ```
